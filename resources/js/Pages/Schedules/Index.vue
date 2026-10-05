@@ -100,9 +100,11 @@
 
     <Footer />
   </div>
+  <AiChatModal />
 </template>
 
 <script setup>
+import AiChatModal from '@/Components/AiChatModal.vue';
 import { ref, computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import Navbar from '@/Components/Navbar.vue';

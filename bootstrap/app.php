@@ -20,7 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/*',
             'scanner/verify',
             'scanner/checkin',
-            'ai/chat',
+            'ai/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
