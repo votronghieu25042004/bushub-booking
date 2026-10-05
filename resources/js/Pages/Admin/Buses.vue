@@ -1,291 +1,398 @@
+<template>
+  <div class="min-h-screen bg-slate-50 flex flex-col">
+    <AdminHeader title="Quản Lý Đội Xe & Chi Tiết Lượt Chạy" subtitle="Theo dõi 10 phương tiện, lượt chạy trong ngày, danh sách hành khách và số ghế ngồi" />
+
+    <main class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+      <!-- Header & Bộ Lọc Điều Khiển -->
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-6 border-b border-slate-200">
+        <div>
+          <h1 class="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <span>🚌</span>
+            <span>Quản Lý Đội Xe & Danh Sách Ghế Ngồi Hành Khách</span>
+          </h1>
+          <p class="text-xs sm:text-sm text-slate-500 mt-1">
+            Xem chung toàn bộ 10 xe hoặc lọc xem riêng từng xe để kiểm tra số lượng khách và vị trí ghế ngồi
+          </p>
+        </div>
+
+        <!-- Bộ lọc Ngày + Chọn Chế Độ Xem -->
+        <div class="flex flex-wrap items-center gap-3">
+          <!-- Chọn ngày -->
+          <div class="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-300 shadow-2xs">
+            <label class="text-xs font-bold text-slate-600 flex items-center gap-1">
+              <span>📅</span>
+              <span>Ngày xem:</span>
+            </label>
+            <input
+              type="date"
+              v-model="currentDate"
+              @change="applyFilters"
+              class="text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:outline-indigo-500 cursor-pointer"
+            />
+          </div>
+
+          <!-- Dropdown Lọc Xe -->
+          <div class="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-300 shadow-2xs">
+            <label class="text-xs font-bold text-slate-600 flex items-center gap-1">
+              <span>🚍</span>
+              <span>Chọn xe:</span>
+            </label>
+            <select
+              v-model="currentBusId"
+              @change="handleBusSelect"
+              class="text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:outline-indigo-500 cursor-pointer"
+            >
+              <option value="ALL">-- Xem chung tất cả 10 xe --</option>
+              <option v-for="b in buses_list" :key="b.id" :value="b.id">
+                {{ b.license_plate }} ({{ b.bus_type }})
+              </option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chế độ Switcher: Thẻ chuyển đổi nhanh -->
+      <div class="flex items-center gap-2 mt-6">
+        <button
+          @click="currentBusId = 'ALL'"
+          class="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+          :class="currentBusId === 'ALL' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'"
+        >
+          <span>📊</span>
+          <span>Xem chung tất cả 10 xe</span>
+        </button>
+
+        <button
+          v-if="currentBusId !== 'ALL'"
+          class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm flex items-center gap-1.5"
+        >
+          <span>🔍</span>
+          <span>Đang xem riêng xe: {{ selectedBusData?.license_plate }}</span>
+        </button>
+      </div>
+
+      <!-- ==================== 1. CHẾ ĐỘ: XEM CHUNG TOÀN BỘ 10 XE ==================== -->
+      <div v-if="currentBusId === 'ALL'" class="mt-6 space-y-6">
+        <!-- Thống kê nhanh toàn đội xe -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p class="text-xs font-bold text-slate-400 uppercase">Tổng Xe Hoạt Động</p>
+              <p class="text-2xl font-black text-slate-900 mt-1">{{ activeBusesCount }} / {{ buses_list.length }} xe</p>
+              <p class="text-xs text-emerald-600 font-semibold mt-0.5">✓ 9 xe sẵn sàng chạy</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">🚌</div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p class="text-xs font-bold text-slate-400 uppercase">Tổng Lượt Chạy Trong Ngày</p>
+              <p class="text-2xl font-black text-indigo-600 mt-1">{{ totalTripsCount }} lượt</p>
+              <p class="text-xs text-slate-500 font-medium mt-0.5">Chạy 2 chiều khứ hồi</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">🚍</div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+            <div>
+              <p class="text-xs font-bold text-slate-400 uppercase">Tổng Khách Đón</p>
+              <p class="text-2xl font-black text-purple-600 mt-1">{{ totalPassengersCount }} khách</p>
+              <p class="text-xs text-slate-500 font-medium mt-0.5">Lưu trữ từ DB đặt vé</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl">👥</div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs flex items-center justify-between bg-emerald-50/20">
+            <div>
+              <p class="text-xs font-bold text-emerald-700 uppercase">Tổng Doanh Thu Ngày</p>
+              <p class="text-xl font-black text-emerald-700 mt-1">{{ formatCurrency(totalRevenueSum) }}</p>
+              <p class="text-xs text-emerald-800 font-medium mt-0.5">Đã bao gồm cọc 30%</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl">💰</div>
+          </div>
+        </div>
+
+        <!-- Bảng Danh Sách 10 Xe -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+            <h2 class="font-bold text-base text-slate-900">Bảng Quản Lý Toàn Bộ 10 Xe (Ngày {{ currentDate }})</h2>
+            <span class="text-xs text-slate-500">Bấm nút "Xem hành khách & ghế" để xem chi tiết từng xe</span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs sm:text-sm">
+              <thead class="bg-slate-100/80 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
+                <tr>
+                  <th class="px-5 py-3">Biển Số Xe</th>
+                  <th class="px-5 py-3">Loại Xe / Sức Chứa</th>
+                  <th class="px-5 py-3">Tài Xế Phụ Trách</th>
+                  <th class="px-5 py-3 text-center">Lượt Chạy / Ngày</th>
+                  <th class="px-5 py-3 text-center">Khách Đã Đón</th>
+                  <th class="px-5 py-3 text-right">Doanh Thu Thu Được</th>
+                  <th class="px-5 py-3 text-center">Trạng Thái</th>
+                  <th class="px-5 py-3 text-center">Hành Động</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr
+                  v-for="bus in buses_list"
+                  :key="bus.id"
+                  class="hover:bg-slate-50/80 transition"
+                  :class="bus.status === 'MAINTENANCE' ? 'bg-red-50/30' : ''"
+                >
+                  <td class="px-5 py-3.5 font-mono font-bold text-slate-900">
+                    <div class="flex items-center gap-2">
+                      <span class="w-2 h-2 rounded-full" :class="bus.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-red-500'"></span>
+                      <span>{{ bus.license_plate }}</span>
+                    </div>
+                  </td>
+                  <td class="px-5 py-3.5">
+                    <span class="font-medium text-slate-800">{{ bus.bus_type }}</span>
+                    <span class="text-xs text-slate-400 block">{{ bus.total_seats }} chỗ</span>
+                  </td>
+                  <td class="px-5 py-3.5 font-medium text-slate-800">
+                    {{ bus.driver_name }}
+                  </td>
+                  <td class="px-5 py-3.5 text-center">
+                    <span class="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded text-xs">
+                      {{ bus.trips_count }} lượt
+                    </span>
+                  </td>
+                  <td class="px-5 py-3.5 text-center font-bold text-slate-700">
+                    {{ bus.total_passengers }} khách
+                  </td>
+                  <td class="px-5 py-3.5 text-right font-bold text-emerald-700 font-mono">
+                    {{ formatCurrency(bus.total_revenue) }}
+                  </td>
+                  <td class="px-5 py-3.5 text-center">
+                    <span
+                      class="px-2.5 py-1 rounded-full text-[11px] font-bold"
+                      :class="bus.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'"
+                    >
+                      {{ bus.status === 'ACTIVE' ? 'Đang hoạt động' : 'Bị hủy / Bảo dưỡng' }}
+                    </span>
+                  </td>
+                  <td class="px-5 py-3.5 text-center">
+                    <button
+                      @click="currentBusId = bus.id"
+                      class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition cursor-pointer flex items-center gap-1 mx-auto"
+                    >
+                      <span>🔍</span>
+                      <span>Xem khách & ghế</span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== 2. CHẾ ĐỘ: XEM RIÊNG TỪNG XE (DANH SÁCH KHÁCH & VỊ TRÍ GHẾ NGỒI) ==================== -->
+      <div v-else class="mt-6 space-y-6">
+        <!-- Chi tiết xe đang chọn -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-2xl font-black">
+                🚌
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h2 class="text-xl font-black text-slate-900 font-mono">{{ selectedBusData?.license_plate }}</h2>
+                  <span
+                    class="px-2.5 py-0.5 rounded-full text-xs font-bold"
+                    :class="selectedBusData?.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'"
+                  >
+                    {{ selectedBusData?.status === 'ACTIVE' ? 'Đang hoạt động' : 'Bảo dưỡng định kỳ' }}
+                  </span>
+                </div>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  {{ selectedBusData?.bus_type }} • Sức chứa: <b>{{ selectedBusData?.total_seats }} chỗ</b> • Tài xế: <b>{{ selectedBusData?.driver_name }}</b>
+                </p>
+              </div>
+            </div>
+
+            <!-- Thống kê của xe trong ngày -->
+            <div class="flex items-center gap-4 text-xs">
+              <div class="text-center px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                <span class="text-slate-400 font-semibold block">Lượt chạy</span>
+                <span class="text-base font-black text-indigo-600">{{ selectedBusData?.trips_count }} lượt</span>
+              </div>
+              <div class="text-center px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                <span class="text-slate-400 font-semibold block">Tổng khách</span>
+                <span class="text-base font-black text-purple-600">{{ selectedBusData?.total_passengers }} khách</span>
+              </div>
+              <div class="text-center px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-200">
+                <span class="text-emerald-700 font-semibold block">Doanh thu xe</span>
+                <span class="text-base font-black text-emerald-700 font-mono">{{ formatCurrency(selectedBusData?.total_revenue) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Danh sách từng lượt chạy của xe đó -->
+          <div class="mt-6 space-y-6">
+            <h3 class="font-black text-slate-900 text-base flex items-center gap-2">
+              <span>📋</span>
+              <span>Các Chuyến Chạy Trong Ngày ({{ currentDate }}) & Danh Sách Ghế Ngồi Hành Khách</span>
+            </h3>
+
+            <div v-if="selectedBusData?.trips.length === 0" class="text-center py-10 bg-slate-50 rounded-xl border border-slate-200">
+              <p class="text-slate-500 text-xs">Phương tiện không có lịch chạy trong ngày {{ currentDate }}.</p>
+            </div>
+
+            <!-- Từng Chuyến Của Xe -->
+            <div
+              v-for="trip in selectedBusData?.trips"
+              :key="trip.id"
+              class="border border-slate-200 rounded-2xl p-5 bg-slate-50/50 space-y-4"
+            >
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono font-bold text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">{{ trip.trip_code }}</span>
+                    <h4 class="font-black text-slate-900 text-sm sm:text-base">{{ trip.route_name }}</h4>
+                    <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                      {{ trip.status }}
+                    </span>
+                  </div>
+                  <p class="text-xs text-slate-500 mt-1">
+                    Khởi hành: <b>{{ trip.departure_time }}</b> → Đến: <b>{{ trip.arrival_time }}</b> | Tài xế: <b>{{ trip.driver_name }} ({{ trip.driver_phone }})</b>
+                  </p>
+                </div>
+
+                <div class="text-right">
+                  <span class="text-xs font-bold text-slate-700 block">Đón: <b>{{ trip.passengers_count }} khách</b></span>
+                  <span class="text-sm font-black text-emerald-700 font-mono">{{ formatCurrency(trip.revenue) }}</span>
+                </div>
+              </div>
+
+              <!-- Bảng Hành Khách & Vị Trí Ghế Ngồi -->
+              <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-2xs">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
+                    <tr>
+                      <th class="px-4 py-2.5">Mã Vé</th>
+                      <th class="px-4 py-2.5">Tên Hành Khách</th>
+                      <th class="px-4 py-2.5">Số Điện Thoại</th>
+                      <th class="px-4 py-2.5 text-center bg-indigo-50/80 text-indigo-900 font-black">VỊ TRÍ GHẾ NGỒI</th>
+                      <th class="px-4 py-2.5">Điểm Đón → Trả</th>
+                      <th class="px-4 py-2.5 text-right">Tiền Vé / Cọc</th>
+                      <th class="px-4 py-2.5 text-center">Thanh Toán</th>
+                      <th class="px-4 py-2.5 text-center">Trạng Thái</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    <tr v-for="p in trip.passengers" :key="p.id" class="hover:bg-slate-50/80">
+                      <td class="px-4 py-2.5 font-mono font-bold text-indigo-600">
+                        {{ p.booking_code }}
+                      </td>
+                      <td class="px-4 py-2.5 font-bold text-slate-900">
+                        {{ p.name }}
+                      </td>
+                      <td class="px-4 py-2.5 font-mono text-slate-600">
+                        {{ p.phone }}
+                      </td>
+                      <td class="px-4 py-2.5 text-center bg-indigo-50/40">
+                        <span class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-black text-xs shadow-2xs">
+                          💺 {{ p.seats }}
+                        </span>
+                      </td>
+                      <td class="px-4 py-2.5 text-slate-600">
+                        <span>{{ p.pickup_stop }}</span>
+                        <span class="text-slate-400 mx-1">→</span>
+                        <span>{{ p.dropoff_stop }}</span>
+                      </td>
+                      <td class="px-4 py-2.5 text-right font-mono font-bold text-slate-900">
+                        <div>{{ formatCurrency(p.amount) }}</div>
+                        <div v-if="p.payment_status === 'PARTIALLY_PAID'" class="text-[10px] text-amber-600">
+                          (Đã cọc 30%: {{ formatCurrency(p.paid_amount) }})
+                        </div>
+                      </td>
+                      <td class="px-4 py-2.5 text-center">
+                        <span
+                          class="px-2 py-0.5 rounded text-[10px] font-bold"
+                          :class="p.payment_status === 'PAID' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
+                        >
+                          {{ p.payment_status === 'PAID' ? 'Đã thanh toán 100%' : 'Cọc 30% (Chờ thu 70%)' }}
+                        </span>
+                      </td>
+                      <td class="px-4 py-2.5 text-center">
+                        <span
+                          class="px-2 py-0.5 rounded text-[10px] font-bold"
+                          :class="p.checkin_status === 'CHECKED_IN' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'"
+                        >
+                          {{ p.checkin_status === 'CHECKED_IN' ? '✓ Đã lên xe' : 'Chờ đón' }}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr v-if="trip.passengers.length === 0">
+                      <td colspan="8" class="text-center py-4 text-slate-400">
+                        Chưa có hành khách đặt vé cho chuyến này
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <AiChatModal />
+  </div>
+</template>
+
 <script setup>
-import AdminHeader from '@/Components/AdminHeader.vue'
-import { ref } from 'vue'
-import { Head, Link, useForm, router } from '@inertiajs/vue3'
+import { ref, computed } from 'vue';
+import { router } from '@inertiajs/vue3';
+import AdminHeader from '@/Components/AdminHeader.vue';
+import AiChatModal from '@/Components/AiChatModal.vue';
 
 const props = defineProps({
-    buses: Array,
-    flash: Object
-})
+  buses_list: Array,
+  selected_date: String,
+  selected_bus_id: [String, Number],
+  all_buses: Array,
+});
 
-const showAddBusModal = ref(false)
-const showStatusModal = ref(false)
-const selectedBus = ref(null)
-const customAmenity = ref('')
+const currentDate = ref(props.selected_date || new Date().toISOString().split('T')[0]);
+const currentBusId = ref(props.selected_bus_id || 'ALL');
 
-const busForm = useForm({
-    license_plate: '',
-    bus_type: 'Giường nằm 34 chỗ',
-    total_seats: 34,
-    floors: 2,
-    amenities: ['Wifi tốc độ cao', 'Điều hòa 2 chiều', 'Cổng sạc Type-C/USB', 'Chăn gối kháng khuẩn'],
-    status: 'ACTIVE',
-    current_km: 10000
-})
+const selectedBusData = computed(() => {
+  if (currentBusId.value === 'ALL') return null;
+  return props.buses_list.find(b => b.id == currentBusId.value) || props.buses_list[0];
+});
 
-const statusForm = useForm({
-    status: 'ACTIVE',
-    maintenance_notes: ''
-})
+const activeBusesCount = computed(() => {
+  return props.buses_list.filter(b => b.status === 'ACTIVE').length;
+});
 
-const amenitiesOptions = ref([
-    'Wifi tốc độ cao', 
-    'Điều hòa 2 chiều', 
-    'Cổng sạc Type-C/USB', 
-    'Chăn gối kháng khuẩn', 
-    'Màn hình LCD riêng', 
-    'Massage tự động', 
-    'Toilet khép kín',
-    'Nước suối & Khăn lạnh',
-    'Tủ lạnh mini',
-    'Đèn đọc sách cá nhân'
-])
+const totalTripsCount = computed(() => {
+  return props.buses_list.reduce((sum, b) => sum + (b.trips_count || 0), 0);
+});
 
-const addCustomAmenity = () => {
-    if (!customAmenity.value.trim()) return
-    const val = customAmenity.value.trim()
-    if (!amenitiesOptions.value.includes(val)) {
-        amenitiesOptions.value.push(val)
-    }
-    if (!busForm.amenities.includes(val)) {
-        busForm.amenities.push(val)
-    }
-    customAmenity.value = ''
-}
+const totalPassengersCount = computed(() => {
+  return props.buses_list.reduce((sum, b) => sum + (b.total_passengers || 0), 0);
+});
 
-const submitBus = () => {
-    busForm.post('/admin/buses', {
-        onSuccess: () => {
-            showAddBusModal.value = false
-            busForm.reset()
-        }
-    })
-}
+const totalRevenueSum = computed(() => {
+  return props.buses_list.reduce((sum, b) => sum + (b.total_revenue || 0), 0);
+});
 
-const openStatusModal = (bus) => {
-    selectedBus.value = bus
-    statusForm.status = bus.status
-    statusForm.maintenance_notes = bus.maintenance_notes || ''
-    showStatusModal.value = true
-}
+const applyFilters = () => {
+  router.get('/admin/buses', {
+    date: currentDate.value,
+    bus_id: currentBusId.value,
+  }, { preserveState: true });
+};
 
-const submitStatus = () => {
-    if (!selectedBus.value) return
-    statusForm.post(`/admin/buses/${selectedBus.value.id}/toggle-status`, {
-        onSuccess: () => {
-            showStatusModal.value = false
-        }
-    })
-}
+const handleBusSelect = () => {
+  applyFilters();
+};
 
-const deleteBus = (busId) => {
-    if (confirm('Bạn có chắc chắn muốn xóa xe này?')) {
-        router.delete(`/admin/buses/${busId}`)
-    }
-}
+const formatCurrency = (val) => {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val || 0);
+};
 </script>
-
-<template>
-    <Head title="Quản Lý Đội Xe - BusHub Admin" />
-
-    <div class="min-h-screen bg-white text-slate-900 pb-20">
-        <!-- Top App Bar -->
-        <AdminHeader title="QUẢN LÝ ĐỘI XE" subtitle="Bảo dưỡng xe, Cấu hình ghế & Tiện nghi cao cấp" />
-
-        <div class="max-w-7xl mx-auto px-4 py-6 space-y-6">
-            <!-- Flash Message -->
-            <div v-if="$page.props.flash?.success" class="p-4 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 text-sm font-semibold flex items-center space-x-2">
-                <span>✅</span>
-                <span>{{ $page.props.flash.success }}</span>
-            </div>
-
-            <!-- Control Bar -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-100 p-5 rounded-2xl border border-slate-300 shadow-xl">
-                <div>
-                    <h2 class="text-xl font-bold text-slate-900">Danh Sách Đội Xe BusHub</h2>
-                    <p class="text-xs text-slate-500">Tổng cộng {{ buses?.length || 0 }} xe đang thuộc quản lý nhà xe</p>
-                </div>
-                <button 
-                    @click="showAddBusModal = true"
-                    class="px-5 py-2.5 bg-blue-600 hover:bg-blue-600 text-slate-900 font-bold rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center space-x-2">
-                    <span class="text-lg">➕</span>
-                    <span>THÊM XE MỚI</span>
-                </button>
-            </div>
-
-            <!-- Buses Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div v-for="b in buses" :key="b.id" class="bg-slate-100 border border-slate-300 rounded-2xl p-5 shadow-xl space-y-4 flex flex-col justify-between">
-                    <div>
-                        <div class="flex items-center justify-between border-b border-slate-300 pb-3">
-                            <div>
-                                <span class="text-xs font-bold text-blue-500 uppercase tracking-wider">Biển Số Xe</span>
-                                <h3 class="text-xl font-black text-slate-900 font-mono">{{ b.license_plate }}</h3>
-                            </div>
-                            <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase"
-                                :class="{
-                                    'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30': b.status === 'ACTIVE' || b.status === 'RUNNING',
-                                    'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30': b.status === 'MAINTENANCE',
-                                    'bg-rose-500/20 text-rose-400 border border-rose-500/30': b.status === 'BROKEN' || b.status === 'SUSPENDED',
-                                }">
-                                {{ b.status }}
-                            </span>
-                        </div>
-
-                        <div class="space-y-2 mt-4 text-xs text-slate-700">
-                            <div>Loại xe: <strong class="text-slate-900">{{ b.bus_type }}</strong></div>
-                            <div>Số chỗ: <strong class="text-slate-900">{{ b.total_seats }} chỗ ({{ b.floors }} tầng)</strong></div>
-                            <div>Số km đã chạy: <strong class="text-slate-900">{{ b.current_km ? b.current_km.toLocaleString() : 0 }} km</strong></div>
-                            <div v-if="b.maintenance_notes" class="p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-300 text-[11px]">
-                                ⚠️ {{ b.maintenance_notes }}
-                            </div>
-                        </div>
-
-                        <!-- Amenities -->
-                        <div class="mt-3">
-                            <div class="text-[11px] font-bold text-slate-500 mb-1.5">Tiện nghi trang bị:</div>
-                            <div class="flex flex-wrap gap-1">
-                                <span v-for="a in (b.amenities || [])" :key="a" class="px-2 py-0.5 bg-white border border-slate-300 rounded text-[10px] text-slate-700">
-                                    {{ a }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="pt-3 border-t border-slate-300 flex items-center justify-between">
-                        <button @click="openStatusModal(b)" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-900 rounded-lg text-xs font-bold transition">
-                            ⚙️ Đổi Trạng Thái / Bảo Dưỡng
-                        </button>
-                        <button @click="deleteBus(b.id)" class="text-rose-400 hover:text-rose-300 text-xs font-bold">
-                            Xóa
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- MODAL: THÊM XE MỚI VỚI TIỆN NGHI TÙY CHỈNH -->
-        <div v-if="showAddBusModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div class="bg-slate-100 border border-slate-300 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-                <div class="flex items-center justify-between pb-3 border-b border-slate-300">
-                    <h3 class="text-lg font-bold text-slate-900">🚍 Thêm Xe Mới & Tiện Nghi Tùy Chỉnh</h3>
-                    <button @click="showAddBusModal = false" class="text-slate-500 hover:text-slate-900 text-xl">&times;</button>
-                </div>
-
-                <form @submit.prevent="submitBus" class="space-y-4 text-xs">
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Biển Số Xe</label>
-                        <input v-model="busForm.license_plate" required type="text" placeholder="43B-123.45" class="w-full bg-white border border-slate-600 rounded-xl px-3 py-2 text-slate-900 font-mono uppercase" />
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-1">Loại Xe</label>
-                            <select v-model="busForm.bus_type" class="w-full bg-white border border-slate-600 rounded-xl px-3 py-2 text-slate-900">
-                                <option value="Giường nằm 34 chỗ">Giường nằm 34 chỗ</option>
-                                <option value="Limousine 34 phòng VIP">Limousine 34 phòng VIP</option>
-                                <option value="Cung điện 22 phòng">Cung điện 22 phòng</option>
-                                <option value="Ghế ngồi cao cấp 29 chỗ">Ghế ngồi cao cấp 29 chỗ</option>
-                                <option value="Xe 2 Tầng: Tầng dưới Ngồi - Tầng trên Nằm">Xe 2 Tầng: Tầng dưới Ngồi - Tầng trên Nằm</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-1">Tổng Số Ghế</label>
-                            <input v-model="busForm.total_seats" required type="number" min="10" max="60" class="w-full bg-white border border-slate-600 rounded-xl px-3 py-2 text-slate-900" />
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-1">Số Tầng</label>
-                            <select v-model="busForm.floors" class="w-full bg-white border border-slate-600 rounded-xl px-3 py-2 text-slate-900">
-                                <option :value="1">1 tầng</option>
-                                <option :value="2">2 tầng</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-1">Trạng Thái Ban Đầu</label>
-                            <select v-model="busForm.status" class="w-full bg-white border border-slate-600 rounded-xl px-3 py-2 text-slate-900">
-                                <option value="ACTIVE">ACTIVE (Sẵn sàng chạy)</option>
-                                <option value="MAINTENANCE">MAINTENANCE (Bảo dưỡng)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Custom Amenities Section -->
-                    <div class="border-t border-slate-300 pt-3 space-y-2">
-                        <div class="flex items-center justify-between">
-                            <label class="font-bold text-blue-500">Danh Sách Tiện Nghi:</label>
-                        </div>
-
-                        <!-- Add Custom Amenity Input -->
-                        <div class="flex items-center space-x-2">
-                            <input 
-                                v-model="customAmenity" 
-                                type="text" 
-                                placeholder="Gõ thêm tiện nghi mới (vd: Tủ lạnh mini, Mát-xa 8 điểm...)" 
-                                @keydown.enter.prevent="addCustomAmenity"
-                                class="w-full bg-white border border-slate-600 rounded-xl px-3 py-2 text-slate-900 text-xs" />
-                            <button 
-                                type="button" 
-                                @click="addCustomAmenity" 
-                                class="px-3 py-2 bg-blue-600 hover:bg-blue-600 text-slate-900 rounded-xl text-xs font-bold shrink-0">
-                                + Thêm
-                            </button>
-                        </div>
-
-                        <!-- Amenities Checkboxes -->
-                        <div class="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
-                            <label v-for="opt in amenitiesOptions" :key="opt" class="flex items-center space-x-2 text-slate-700 bg-white/60 p-2 rounded-xl border border-slate-300/60 cursor-pointer">
-                                <input type="checkbox" :value="opt" v-model="busForm.amenities" class="rounded bg-white border-slate-600 text-blue-600 focus:ring-blue-600" />
-                                <span class="text-[11px]">{{ opt }}</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="pt-3 border-t border-slate-300 flex justify-end space-x-3">
-                        <button type="button" @click="showAddBusModal = false" class="px-4 py-2 bg-slate-700 text-slate-700 rounded-xl font-bold">Hủy</button>
-                        <button type="submit" :disabled="busForm.processing" class="px-5 py-2 bg-blue-600 hover:bg-blue-600 text-slate-900 font-bold rounded-xl shadow-lg transition">
-                            {{ busForm.processing ? 'Đang thêm...' : 'Lưu Xe Mới' }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- MODAL: ĐỔI TRẠNG THÁI / BẢO DƯỠNG -->
-        <div v-if="showStatusModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div class="bg-slate-100 border border-slate-300 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-                <div class="flex items-center justify-between pb-3 border-b border-slate-300">
-                    <h3 class="text-lg font-bold text-slate-900">⚙️ Cập Nhật Xe {{ selectedBus?.license_plate }}</h3>
-                    <button @click="showStatusModal = false" class="text-slate-500 hover:text-slate-900 text-xl">&times;</button>
-                </div>
-
-                <form @submit.prevent="submitStatus" class="space-y-4 text-xs">
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Trạng Thái Vận Hành</label>
-                        <select v-model="statusForm.status" class="w-full bg-white border border-slate-600 rounded-xl px-3 py-2 text-slate-900">
-                            <option value="ACTIVE">ACTIVE (Sẵn sàng chạy)</option>
-                            <option value="RUNNING">RUNNING (Đang trên đường)</option>
-                            <option value="MAINTENANCE">MAINTENANCE (Đang bảo dưỡng định kỳ)</option>
-                            <option value="BROKEN">BROKEN (Hỏng hóc, chờ sửa chữa)</option>
-                            <option value="SUSPENDED">SUSPENDED (Tạm ngưng sử dụng)</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Ghi Chú Bảo Dưỡng / Lý Do</label>
-                        <textarea v-model="statusForm.maintenance_notes" rows="3" placeholder="Thay dầu nhớt máy, bảo dưỡng điều hòa tại Garage BusHub..." class="w-full bg-white border border-slate-600 rounded-xl px-3 py-2 text-slate-900"></textarea>
-                    </div>
-
-                    <div class="pt-3 border-t border-slate-300 flex justify-end space-x-3">
-                        <button type="button" @click="showStatusModal = false" class="px-4 py-2 bg-slate-700 text-slate-700 rounded-xl font-bold">Hủy</button>
-                        <button type="submit" :disabled="statusForm.processing" class="px-5 py-2 bg-blue-600 hover:bg-blue-600 text-slate-900 font-bold rounded-xl shadow-lg transition">
-                            Cập Nhật Trạng Thái
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-</template>
